@@ -2,6 +2,11 @@
  * Interface to the Pololu DRV8835 Motor Shield, to integrate the encoders. 
  */
 
+#ifndef motors_h
+#define motors_h
+
+#include <DRV8835MotorShield.h>
+#include "motor_encoder.h"
 
 class Motor {
 
@@ -273,5 +278,7 @@ class Motors {
       }
 
 };
+
+#endif
 
 

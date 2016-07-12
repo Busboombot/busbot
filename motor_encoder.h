@@ -5,6 +5,10 @@
 #ifndef motor_encoder_h
 #define motor_encoder_h
 
+#include <Arduino.h>
+#include "digitalWriteFast.h"
+#include "direct_pin_read.h"
+#include "interrupt_pins.h"
 
 #define VELOCITY_CALC_DELAY 50 // How often to calc velocity, in miliseconds
 
@@ -42,7 +46,6 @@ typedef struct {
 
 } Encoder_internal_state_t;
 
-Encoder_internal_state_t encoder;
 
 class Encoder {
 
