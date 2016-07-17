@@ -5,23 +5,54 @@
 
 #include "motor_encoder.h"
 
-Encoder_internal_state_t * Encoder::interruptArgs[CORE_NUM_INTERRUPT];
+Encoder_internal_state_t * Encoder::states[CORE_NUM_INTERRUPT] = {};
 
-void Encoder::read_initial_encoder_state(){
-    delayMicroseconds(2000);
-    uint8_t s = 0;
-    if (DIRECT_PIN_READ(encoder.pin1_register, encoder.pin1_bitmask)) {
-      s |= 1;
-    }
-    if (DIRECT_PIN_READ(encoder.pin2_register, encoder.pin2_bitmask)) {
-      s |= 2;
-    }
-    encoder.state = s;
+Encoder::Encoder(int pin1, int pin2) {
+  
+  encoderPin = pin1;
 
-    encoder.last_velocity_calc = millis();
+  switch (pin1) {
+      case CORE_INT0_PIN:
+        interrupt =  0;
+        attachInterrupt(0, isr0, CHANGE);
+        break;
+      case CORE_INT1_PIN:
+        interrupt = 1;
+        attachInterrupt(1, isr1, CHANGE);
+        break;
+
+  }
+
+  Encoder_internal_state_t *encoder = states[interrupt] = new Encoder_internal_state_t();
+
+  encoder->pin1 = pin1;
+  encoder->pin1_register = PIN_TO_BASEREG(pin1);
+  encoder->pin1_bitmask = PIN_TO_BITMASK(pin1);
+
+  encoder->pin2_register = PIN_TO_BASEREG(pin2);
+  encoder->pin2_bitmask = PIN_TO_BITMASK(pin2);
+    
+  uint8_t s = 0;
+  
+  if (DIRECT_PIN_READ(encoder->pin1_register, encoder->pin1_bitmask)) {
+    s |= 1;
+  }
+  
+  if (DIRECT_PIN_READ(encoder->pin2_register, encoder->pin2_bitmask)) {
+    s |= 2;
+  }
+  
+  encoder->state = s;
+
+  encoder->last_velocity_calc = millis();
+
+
 }
 
+
+
 void Encoder::update(Encoder_internal_state_t *encoder) {
+
 
   /// The important parts of this code originally from: Paul Stoffregen <paul@pjrc.com>
 
@@ -83,27 +114,21 @@ void Encoder::update(Encoder_internal_state_t *encoder) {
 
   if (ms >  encoder->last_velocity_calc + VELOCITY_CALC_DELAY){
 
+
     // FIXME! Should probably force a velocity cal when the direction changes. 
     if (ms > encoder->last_velocity_calc){ // Wrap-around protection
             
-      encoder->velocity = float( encoder->position - encoder->last_position ) / float(ms - encoder->last_velocity_calc) * 1000.0;
+      encoder->velocity = float( encoder->position - encoder->last_position ) / 
+                          float(ms - encoder->last_velocity_calc) * 1000.0;
 
-      float acceleration = float( encoder->velocity - encoder->last_velocity ) / float(ms - encoder->last_velocity_calc) * 1000.0;
+      float acceleration = float( encoder->velocity - encoder->last_velocity ) / 
+                          float(ms - encoder->last_velocity_calc) * 1000.0;
 
       // Rolling average of acceleration
       encoder->acceleration *= .9;
       encoder->acceleration += acceleration/10.0;
 
-      if (false and encoder->pin1 == 2){
-        Serial.print(encoder->position);Serial.print("\t");
-        Serial.print(encoder->last_position);Serial.print("\t");
-        Serial.print(float( encoder->position - encoder->last_position ));Serial.print("\t");
-        Serial.print(ms);Serial.print("\t");
-        Serial.print(encoder->last_velocity_calc);Serial.print("\t");
-        Serial.print(float(ms - encoder->last_velocity_calc));Serial.print("\t");
-        Serial.print(encoder->velocity);Serial.print("\t");
-        Serial.println(encoder->acceleration);
-      }
+
       
       encoder->last_velocity_calc = ms;
       encoder->last_position = encoder->position;
@@ -121,6 +146,33 @@ void Encoder::update(Encoder_internal_state_t *encoder) {
       }
     }
   }
+}
+
+
+void Encoder::decPulsesToEvent(Encoder_internal_state_t *encoder, int dec) {
+
+
+  if (encoder->pulsesToEvent <= 0){
+    return;
+  } 
+
+  encoder->pulsesToEvent -= dec;
+
+  if (encoder->pulsesToEvent <= 0){
+    
+
+    encoder->pulsesToEvent = 0;
+    encoder->eventTriggered = true;
+    
+    Motor *motor = encoder->motor;
+    MotorUpdateCallback f = encoder->eventCallback;
+    
+    if (f){
+      (motor->*f)(encoder->pin1);
+    }
+    
+  } 
+
 }
 
 /* Encoder Library, for measuring quadrature encoded signals

@@ -38,9 +38,12 @@ typedef struct {
 
   volatile int pulsesToEvent = 0; // Number of pulses remaining to call positionCallback
   
+  volatile int eventTriggered = false; // Number of pulses remaining to call positionCallback
+  
   volatile unsigned long last_velocity_calc = 0;
 
   Motor *motor;
+  
   volatile MotorUpdateCallback eventCallback = 0; // Called when 'pulses remaining' is  negative
   volatile MotorUpdateCallback updateCallback = 0; // Called when veloicty is updated
 
@@ -50,97 +53,76 @@ typedef struct {
 class Encoder {
 
   private:
+    
+    int encoderPin;
   
-    Encoder_internal_state_t encoder;
-
+    int interrupt;
+  
     static void update(Encoder_internal_state_t *encoder);
     void read_initial_encoder_state();
 
-    inline static void decPulsesToEvent(Encoder_internal_state_t *encoder, int dec) {
+    inline static void decPulsesToEvent(Encoder_internal_state_t *encoder, int dec);
 
-      //Serial.print(encoder->pin1); Serial.print(" "); Serial.println(encoder->pulsesToEvent);
-
-      if (encoder->pulsesToEvent <= 0){
-        return;
-      } 
-
-      encoder->pulsesToEvent -= dec;
-
-      if (encoder->pulsesToEvent <= 0){
-        encoder->pulsesToEvent = 0;
-        Motor *motor = encoder->motor;
-        MotorUpdateCallback f = encoder->eventCallback;
-        (motor->*f)(encoder->pin1);
-      } 
-
+    inline void getState(){
+      
     }
 
   public:
 
-    static Encoder_internal_state_t * interruptArgs[CORE_NUM_INTERRUPT];
+    static Encoder_internal_state_t * states[CORE_NUM_INTERRUPT];
+
+
+    Encoder(int pin1, int pin2);
 
     // Assuming Uno. Can't just attach the interrupt directly b/c the handler's 
     // don't take arguments. 
-    static void isr0(void) { update(interruptArgs[0]); }
-    static void isr1(void) { update(interruptArgs[1]); }
-
-    inline Encoder(int pin1, int pin2) {
-    
-      switch (pin1) {
-          case CORE_INT0_PIN:
-            interruptArgs[0] = &encoder;
-            attachInterrupt(0, isr0, CHANGE);
-            break;
-          case CORE_INT1_PIN:
-            interruptArgs[1] = &encoder;
-            attachInterrupt(1, isr1, CHANGE);
-            break;
-
-      }
-
-      encoder.pin1 = pin1;
-      encoder.pin1_register = PIN_TO_BASEREG(pin1);
-      encoder.pin1_bitmask = PIN_TO_BITMASK(pin1);
-
-      encoder.pin2_register = PIN_TO_BASEREG(pin2);
-      encoder.pin2_bitmask = PIN_TO_BITMASK(pin2);
-
-      read_initial_encoder_state();
-
-    }
+    static void isr0(void) { update(states[0]); }
+    static void isr1(void) { update(states[1]); }
 
     inline int32_t getPosition() {
-      return encoder.position;
+      return states[interrupt]->position;
     }
 
     inline int8_t getDirection() {
-      return encoder.direction;
+      return states[interrupt]->direction;
     }
 
     inline float getVelocity() {
-      return encoder.velocity;
+      return states[interrupt]->velocity;
     }
 
     inline float getMeanVelocity() {
-      return encoder.velocity;
+      return states[interrupt]->velocity;
     }
 
     inline float getAcceleration() {
-      return encoder.acceleration;
+      return states[interrupt]->acceleration;
     }
 
     inline void setUpdateCallback(Motor *motor, MotorUpdateCallback callback){
-      encoder.motor = motor;
-      encoder.updateCallback = callback;
+      states[interrupt]->motor = motor;
+      states[interrupt]->updateCallback = callback;
     }
 
     inline void setEventCallback(Motor *motor, MotorUpdateCallback callback){
-      encoder.motor = motor;
-      encoder.eventCallback = callback;
+      states[interrupt]->motor = motor;
+      states[interrupt]->eventCallback = callback;
     }
 
     inline void setPulsesToEvent(int pulses){
-      encoder.pulsesToEvent = pulses;
+      states[interrupt]->pulsesToEvent = pulses;
+    }
+    
+    inline int getPulsesToEvent(){
+      return states[interrupt]->pulsesToEvent;
+    }
+    
+    inline void clearEvent(){
+      states[interrupt]->eventTriggered = false;
+    }
+    
+    inline bool isEventTriggered(){
+      return states[interrupt]->eventTriggered;
     }
 };
 
